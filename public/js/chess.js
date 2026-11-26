@@ -158,41 +158,123 @@
     return best || ms[0];
   }
 
+  // ── 온라인 대국 상태 (수강반 서버에 저장) ──
+  const games = new Map();      // id -> game row {id,w,wn,b,bn,moves:[{f,t,p}],result}
+  const views = new Map();      // id -> redraw()
+  GL.on('srv:init', d => { games.clear(); (d.games || []).forEach(g => games.set(g.id, g)); views.forEach(f => f()); });
+  GL.on('srv:game', d => {
+    const g = d.game; if (!g) return;
+    const isNew = !games.has(g.id);
+    games.set(g.id, g);
+    if (views.has(g.id)) views.get(g.id)();
+    const me = GL.state.me && GL.state.me.id;
+    if (!isNew || (g.w !== me && g.b !== me)) return;
+    const opp = g.w === me ? g.bn : g.wn;
+    if (d.by === me) GL.notebook.addGame('chess', { online: g.id, title: `좌표평면 연습 (vs ${opp})` });
+    else GL.toast(`${opp}님이 체스 대국을 신청했습니다.`, { label: '받기', fn: () => { GL.setMode('note'); GL.notebook.addGame('chess', { online: g.id, title: `좌표평면 연습 (vs ${opp})` }); } }, 8000);
+  });
+  GL.on('srv:game_move', d => {
+    const g = games.get(d.id); if (!g) return;
+    if (g.moves.length === d.ply) g.moves.push(d.mv);
+    if (views.has(d.id)) views.get(d.id)();
+  });
+  function replay(moves) {
+    const h = [initial()];
+    for (const mv of moves) {
+      const s = h[h.length - 1], all = legal(s);
+      const m = all.find(x => x.from === mv.f && x.to === mv.t);
+      if (!m) break;
+      const n = apply(s, m); n.moves = [...s.moves, san(s, m, all)]; n.last = [m.from, m.to];
+      h.push(n);
+    }
+    return h;
+  }
+  function challenge(anchor) {
+    const me = GL.state.me && GL.state.me.id;
+    const others = (GL.state.online || []).filter(u => u.id !== me);
+    const mine = [...games.values()].filter(g => !g.result && (g.w === me || g.b === me));
+    GL.pop(anchor, el => {
+      el.append(h('h4', {}, '대국 신청 (지금 접속 중)'));
+      if (!others.length) el.append(h('button', { disabled: true }, '접속 중인 친구가 없습니다'));
+      others.forEach(u => el.append(h('button', { onclick: () => {
+        GL.closePop();
+        GL.send({ type: 'game_new', id: 'c' + Math.random().toString(36).slice(2, 10), kind: 'chess', opp: u.id, color: Math.random() < .5 ? 'w' : 'b' });
+        GL.toast(`${u.name}님에게 대국을 신청했습니다.`);
+      } }, h('span', { class: 'c-dot', style: `background:${u.color};width:8px;height:8px;border-radius:50%;display:inline-block` }), u.name, h('small', {}, '색은 랜덤'))));
+      if (mine.length) {
+        el.append(h('hr'), h('h4', {}, '진행 중인 내 대국'));
+        mine.forEach(g => el.append(h('button', { onclick: () => { GL.closePop(); GL.notebook.addGame('chess', { online: g.id, title: `좌표평면 연습 (vs ${g.w === me ? g.bn : g.wn})` }); } },
+          `vs ${g.w === me ? g.bn : g.wn}`, h('small', {}, `${g.moves.length}수`))));
+      }
+    });
+  }
+
   GL.games.chess = {
     label: '체스', title: '좌표평면 연습',
-    mount(el, tabId) {
+    mount(el, tabId, tab) {
       const key = 'chess_' + tabId;
+      const online = tab && tab.online;
       const sheetEl = h('div', { class: 'sheet' }, h('h3', {}, '좌표평면 위의 점 이동'), h('div', { class: 'sub' }, '각 점의 이동 규칙을 지켜 상대 K를 더 이상 움직일 수 없게 만드시오.'));
       el.append(sheetEl);
       const bar = h('div', { class: 'bar' }), boardEl = h('div', { class: 'gchess' }), movesEl = h('ol', { class: 'gchess-moves' });
       sheetEl.append(bar, h('div', { class: 'gchess-wrap' }, boardEl, movesEl));
 
-      let saved = store.get(key, null);
+      let saved = online ? null : store.get(key, null);
       let hist = saved ? saved.hist : [initial()]; // 상태 스택 (무르기용)
-      let mode = saved ? saved.mode : 'ai';         // 'ai' | 'two'
+      let mode = online ? 'online' : saved ? saved.mode : 'ai';   // 'ai' | 'two' | 'online'
       let flip = saved ? saved.flip : false;
       let sel = -1, thinking = false;
       const S = () => hist[hist.length - 1];
-      const save = () => store.set(key, { hist: hist.slice(-120), mode, flip });
+      const save = () => { if (!online) store.set(key, { hist: hist.slice(-120), mode, flip }); };
+      const myId = () => GL.state.me && GL.state.me.id;
+      const G = () => games.get(online);
+      const myColor = () => { const g = G(); return !g ? null : g.w === myId() ? 'w' : g.b === myId() ? 'b' : null; };
+
+      function syncOnline() {
+        const g = G();
+        if (!g) { draw(); return; }
+        hist = replay(g.moves);
+        if (myColor() === 'b' && flip === false && !syncOnline.flipped) { flip = true; syncOnline.flipped = true; }
+        sel = -1;
+        draw();
+      }
 
       function status() {
         const s = S(), ms = legal(s), chk = inCheck(s, s.turn);
+        if (online) {
+          const g = G();
+          if (!g) return '대국 정보를 불러오는 중…';
+          if (g.result) return g.result === '1/2' ? '무승부' : (g.result === '1-0' ? `${g.wn} 승` : `${g.bn} 승`) + (g.reason ? ` (${g.reason})` : '');
+          const turnName = s.turn === 'w' ? g.wn : g.bn;
+          return (s.turn === myColor() ? '내 차례' : `${turnName}님 차례`) + (chk ? ' · 체크!' : '');
+        }
         if (!ms.length) return chk ? (s.turn === 'w' ? '흑 승 (체크메이트)' : '백 승 (체크메이트)') : '무승부 (스테일메이트)';
         return (s.turn === 'w' ? '백' : '흑') + ' 차례' + (chk ? ' · 체크!' : '') + (thinking ? ' · 컴퓨터 생각 중…' : '');
       }
+      function push(s, m) {
+        const all = legal(s), n = apply(s, m);
+        n.moves = [...s.moves, san(s, m, all)]; n.last = [m.from, m.to];
+        hist.push(n);
+        return n;
+      }
       function doMove(m) {
-        const s = S(), all = legal(s);
-        const n = apply(s, m);
-        n.moves = [...s.moves, san(s, m, all)];
-        n.last = [m.from, m.to];
-        hist.push(n); sel = -1; save(); draw();
+        const s = S();
+        const n = push(s, m);
+        sel = -1;
+        if (online) {
+          const g = G();
+          g.moves.push({ f: m.from, t: m.to, p: m.promo ? 'q' : undefined });
+          GL.send({ type: 'game_move', id: online, ply: g.moves.length - 1, mv: { f: m.from, t: m.to, p: m.promo ? 'q' : undefined } });
+          if (!legal(n).length) GL.send({ type: 'game_end', id: online, result: inCheck(n, n.turn) ? (n.turn === 'w' ? '0-1' : '1-0') : '1/2', reason: inCheck(n, n.turn) ? '체크메이트' : '스테일메이트' });
+          draw(); return;
+        }
+        save(); draw();
         if (mode === 'ai' && n.turn === 'b' && legal(n).length) {
           thinking = true; draw();
           setTimeout(() => {
-            const cur = S();
-            const bm = bestMove(cur);
+            const cur = S(), bm = bestMove(cur);
             thinking = false;
-            if (bm) { const nn = apply(cur, bm); nn.moves = [...cur.moves, san(cur, bm, legal(cur))]; nn.last = [bm.from, bm.to]; hist.push(nn); save(); }
+            if (bm) { push(cur, bm); save(); }
             draw();
           }, 60);
         }
@@ -200,6 +282,7 @@
       function click(i) {
         const s = S();
         if (thinking || (mode === 'ai' && s.turn === 'b')) return;
+        if (online) { const g = G(); if (!g || g.result || s.turn !== myColor()) return; }
         const ms = legal(s);
         if (sel >= 0) {
           const m = ms.find(m => m.from === sel && m.to === i);
@@ -208,17 +291,29 @@
         sel = s.b[i] && color(s.b[i]) === s.turn && ms.some(m => m.from === i) ? i : -1;
         draw();
       }
+      const newLocal = m => { mode = m; hist = [initial()]; sel = -1; save(); draw(); };
       function draw() {
         const s = S(), ms = legal(s), targets = new Set(ms.filter(m => m.from === sel).map(m => m.to));
         const chkK = inCheck(s, s.turn) ? kingAt(s.b, s.turn) : -1;
         bar.innerHTML = '';
-        GL.add(bar, 
-          h('button', { class: 'hbtn', 'aria-pressed': String(mode === 'ai'), onclick: () => { mode = 'ai'; hist = [initial()]; sel = -1; save(); draw(); } }, '혼자 (vs 컴퓨터)'),
-          h('button', { class: 'hbtn', 'aria-pressed': String(mode === 'two'), onclick: () => { mode = 'two'; hist = [initial()]; sel = -1; save(); draw(); } }, '둘이서'),
-          h('span', {}, h('b', {}, status())),
-          h('button', { class: 'hbtn', onclick: () => { if (thinking) return; const n = mode === 'ai' ? 2 : 1; for (let k = 0; k < n && hist.length > 1; k++) hist.pop(); sel = -1; save(); draw(); } }, '무르기'),
-          h('button', { class: 'hbtn', onclick: () => { flip = !flip; save(); draw(); } }, '판 뒤집기'),
-          h('button', { class: 'hbtn', onclick: () => { hist = [initial()]; sel = -1; save(); draw(); } }, '새 판'));
+        if (online) {
+          const g = G();
+          GL.add(bar,
+            g ? h('span', {}, `${g.wn}(백) vs ${g.bn}(흑)`) : null,
+            h('span', {}, h('b', {}, status())),
+            g && !g.result && myColor() ? h('button', { class: 'hbtn', onclick: () => GL.send({ type: 'game_end', id: online, result: myColor() === 'w' ? '0-1' : '1-0', reason: '기권' }) }, '기권') : null,
+            g && !g.result && myColor() ? h('button', { class: 'hbtn', onclick: () => GL.send({ type: 'game_end', id: online, result: '1/2', reason: '합의 무승부' }) }, '무승부') : null,
+            h('button', { class: 'hbtn', onclick: () => { flip = !flip; draw(); } }, '판 뒤집기'));
+        } else {
+          GL.add(bar,
+            h('button', { class: 'hbtn', 'aria-pressed': String(mode === 'ai'), onclick: () => newLocal('ai') }, '혼자 (vs 컴퓨터)'),
+            h('button', { class: 'hbtn', 'aria-pressed': String(mode === 'two'), onclick: () => newLocal('two') }, '둘이서'),
+            GL.state.demo ? null : h('button', { class: 'hbtn', onclick: e => challenge(e.currentTarget) }, '친구랑 (온라인)'),
+            h('span', {}, h('b', {}, status())),
+            h('button', { class: 'hbtn', onclick: () => { if (thinking) return; const n = mode === 'ai' ? 2 : 1; for (let k = 0; k < n && hist.length > 1; k++) hist.pop(); sel = -1; save(); draw(); } }, '무르기'),
+            h('button', { class: 'hbtn', onclick: () => { flip = !flip; save(); draw(); } }, '판 뒤집기'),
+            h('button', { class: 'hbtn', onclick: () => newLocal(mode) }, '새 판'));
+        }
         boardEl.innerHTML = '';
         for (let k = 0; k < 64; k++) {
           const i = flip ? 63 - k : k, r = Math.floor(i / 8), c = i % 8, p = s.b[i];
@@ -237,9 +332,12 @@
         for (let k = 0; k < s.moves.length; k += 2) movesEl.append(h('li', {}, s.moves[k] + (s.moves[k + 1] ? '   ' + s.moves[k + 1] : '')));
         movesEl.scrollTop = movesEl.scrollHeight;
       }
-      draw();
-      if (mode === 'ai' && S().turn === 'b') { hist.pop(); if (!hist.length) hist = [initial()]; draw(); }
-      return { pause() { }, resume() { }, destroy() { } };
+      if (online) { views.set(online, syncOnline); syncOnline(); }
+      else {
+        draw();
+        if (mode === 'ai' && S().turn === 'b') { hist.pop(); if (!hist.length) hist = [initial()]; draw(); }
+      }
+      return { pause() { }, resume() { }, destroy() { if (online) views.delete(online); } };
     },
   };
 })();

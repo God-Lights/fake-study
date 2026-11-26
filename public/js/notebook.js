@@ -49,7 +49,7 @@
       if (!g) {
         const el = h('div', { class: 'game on' });
         gameHost.append(el);
-        g = { el, api: GL.games[t.game].mount(el, id) };
+        g = { el, api: GL.games[t.game].mount(el, id, t) };
         inst.set(id, g);
       }
       g.el.classList.add('on'); g.api.resume();
@@ -75,10 +75,14 @@
     GL.send({ type: 'tab_add', id, title: `${SUBJECTS[n % SUBJECTS.length]} 필기 ${n}`, paper });
     active = id; store.set('activeTab', id);
   }
-  function addGame(key) {
+  function addGame(key, extra) {
+    if (extra && extra.online) {
+      const ex = games.find(g => g.online === extra.online);
+      if (ex) return activate(ex.id);
+    }
     const id = 'g' + Math.random().toString(36).slice(2, 10);
     const same = games.filter(g => g.game === key).length;
-    games.push({ id, game: key, title: GL.games[key].title + (same ? ` ${same + 1}` : '') });
+    games.push({ id, game: key, title: GL.games[key].title + (same ? ` ${same + 1}` : ''), ...(extra || {}) });
     store.set('gameTabs', games);
     activate(id);
   }
@@ -130,5 +134,8 @@
     // 보스키: 게임 탭이면 첫 공유 노트로
     study() { if (isGame(active) && boards[0]) activate(boards[0].id); },
     onGame: () => isGame(active),
+    addGame: (key, extra) => { if (GL.$('#stage').dataset.mode !== 'note') GL.setMode('note'); addGame(key, extra); },
+    activate: id => { if (GL.$('#stage').dataset.mode !== 'note') GL.setMode('note'); activate(id); },
+    active: () => active,
   };
 })();

@@ -112,7 +112,8 @@
         skin === 'black' ? h('span', { class: 'row-tools' }, h('span', { html: ic('pin', 17) }), h('span', { html: ic('dots', 18) })) : null)));
     const seen = new Set();
     for (let i = msgs.length - 1; i >= 0 && seen.size < 8; i--) {
-      const t = msgs[i].text.split('\n')[0].slice(0, 28);
+      if (msgs[i].uid === 'sys') continue;
+      const t = msgs[i].text.split('\n')[0].replace(/\*\*|`|\$/g, '').slice(0, 28);
       if (t.length < 2 || seen.has(t)) continue;
       seen.add(t);
       recent.append(h('button', { class: 'c-item recent', onclick: () => jumpTo(msgs[i].id) }, h('span', { class: 'lbl' }, t),
@@ -175,13 +176,60 @@
     if (skin === 'black' && !has) s.disabled = false;
   }
 
+  // ── 서식: 링크, `코드`, **굵게**, - 목록, $수식$ (KaTeX) ──
   function linkify(text) {
-    return esc(text).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    return esc(text)
+      .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+      .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/^[-•] (.*)$/gm, '<span class="li">$1</span>');
+  }
+  let katexReady = null;
+  function loadKatex() {
+    if (katexReady) return katexReady;
+    const base = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/';
+    document.head.append(h('link', { rel: 'stylesheet', href: base + 'katex.min.css' }));
+    const load = src => new Promise((res, rej) => document.head.append(h('script', { src, onload: res, onerror: rej })));
+    katexReady = load(base + 'katex.min.js').then(() => load(base + 'contrib/auto-render.min.js')).catch(() => { });
+    return katexReady;
+  }
+  function math(el, text) {
+    if (!/\$|\\\(|\\\[/.test(text)) return;
+    loadKatex().then(() => {
+      if (!window.renderMathInElement) return;
+      renderMathInElement(el, {
+        delimiters: [{ left: '$$', right: '$$', display: true }, { left: '\\[', right: '\\]', display: true }, { left: '$', right: '$', display: false }, { left: '\\(', right: '\\)', display: false }],
+        throwOnError: false,
+      });
+    });
+  }
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // AI 답변처럼 글자가 흘러나오게
+  function stream(body, text) {
+    if (reduced || text.length > 1200) { body.innerHTML = linkify(text); math(body, text); return; }
+    const total = Math.min(1600, 260 + text.length * 16), t0 = performance.now();
+    body.textContent = '';
+    const cur = h('span', { class: 'c-cursor' });
+    const tick = now => {
+      const n = Math.floor(text.length * Math.min(1, (now - t0) / total));
+      if (n < text.length) {
+        body.textContent = text.slice(0, n); body.append(cur);
+        requestAnimationFrame(tick);
+      } else { body.innerHTML = linkify(text); math(body, text); }
+    };
+    requestAnimationFrame(tick);
   }
   function fmtTime(at) { const d = new Date(at); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
-  function msgEl(m) {
+  function msgEl(m, live) {
+    if (m.uid === 'sys') return h('div', { class: 'c-sys', 'data-id': m.id }, m.text);
     const mine = GL.state.me && m.uid === GL.state.me.id;
+    const el = msgElInner(m, mine);
+    const body = el.querySelector(mine ? '.bub' : '.body');
+    if (live && !mine) stream(body, m.text); else math(body, m.text);
+    return el;
+  }
+  function msgElInner(m, mine) {
     if (mine) {
       return h('div', { class: 'c-msg me', 'data-id': m.id },
         h('div', { class: 'bub', html: linkify(m.text) }),
@@ -207,18 +255,20 @@
     msgsEl.innerHTML = '';
     const list = filter ? msgs.filter(m => (m.text + m.name).toLowerCase().includes(filter)) : msgs;
     list.forEach(m => msgsEl.append(msgEl(m)));
+    msgsEl.append(typingBox); renderTyping();
     main.classList.toggle('is-empty', !msgs.length);
     renderHeader();
     scrollEl.scrollTop = scrollEl.scrollHeight;
   }
 
   function append(m) {
+    clearTyping(m.uid);
     msgs.push(m);
     if (msgs.length > 500) msgs.shift();
     const wasEmpty = main.classList.contains('is-empty');
     if (wasEmpty) return renderAll();
     const nearBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 160;
-    if (!filter || (m.text + m.name).toLowerCase().includes(filter)) msgsEl.append(msgEl(m));
+    if (!filter || (m.text + m.name).toLowerCase().includes(filter)) msgsEl.insertBefore(msgEl(m, true), typingBox);
     const mine = GL.state.me && m.uid === GL.state.me.id;
     if (nearBottom || mine) scrollEl.scrollTop = scrollEl.scrollHeight;
     if (!mine && !visible()) { unread++; badge(); }
@@ -258,11 +308,34 @@
 
   function renderAll() { renderSide(); renderComposer(); renderMsgs(); }
 
+  // ── 입력 중 표시 ──
+  const typingBox = h('div', { class: 'c-typing-box' });
+  const typing = new Map(); // uid -> {name, timer}
+  function renderTyping() {
+    typingBox.innerHTML = '';
+    for (const [, t] of typing) {
+      typingBox.append(skin === 'black'
+        ? h('div', { class: 'c-typing' }, h('span', { class: 'c-pulse' }), h('small', {}, t.name))
+        : h('div', { class: 'c-typing shimmer' }, `${t.name}님이 답변을 작성하는 중`));
+    }
+    const nearBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 160;
+    if (nearBottom) scrollEl.scrollTop = scrollEl.scrollHeight;
+  }
+  function clearTyping(uid) { const t = typing.get(uid); if (t) { clearTimeout(t.timer); typing.delete(uid); renderTyping(); } }
+  GL.on('srv:typing', d => {
+    const t = typing.get(d.uid);
+    if (t) clearTimeout(t.timer);
+    typing.set(d.uid, { name: d.name, timer: setTimeout(() => clearTyping(d.uid), 4000) });
+    renderTyping();
+  });
+  let lastTyping = 0;
+
   // ── 입력 ──
   input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(200, input.scrollHeight) + 'px';
     updateSend();
+    if (input.value.trim() && Date.now() - lastTyping > 2500) { lastTyping = Date.now(); GL.send({ type: 'typing' }); }
   });
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#cForm').requestSubmit(); }
@@ -272,7 +345,7 @@
     const text = input.value.trim();
     if (!text) return;
     if (!GL.send({ type: 'chat', text })) { GL.toast('연결이 끊겼습니다. 잠시 후 다시 보내 주세요.'); return; }
-    input.value = ''; input.style.height = 'auto'; updateSend();
+    input.value = ''; input.style.height = 'auto'; updateSend(); lastTyping = 0;
   });
   $('#cSearchInput').addEventListener('input', e => { filter = e.target.value.trim().toLowerCase(); renderMsgs(); });
   $('#cUnderRoomBtn').addEventListener('click', e => GL.roomMenu(e.currentTarget));
@@ -281,6 +354,7 @@
   GL.on('srv:init', d => { msgs = d.messages || []; renderAll(); });
   GL.on('srv:chat', d => append(d.msg));
   GL.on('srv:presence', () => renderSide());
+  GL.on('srv:quiz', () => { typing.forEach(t => clearTimeout(t.timer)); typing.clear(); renderTyping(); });
   GL.on('rooms', () => { renderSide(); renderComposer(); renderHeader(); });
 
   GL.chat = {

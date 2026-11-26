@@ -123,8 +123,17 @@
     return [Math.round(Math.max(-20, Math.min(W + 20, x)) * 10) / 10, Math.round((i * H + Math.max(-20, Math.min(H + 20, y))) * 10) / 10];
   }
 
+  const quizLocked = () => {
+    const q = GL.state.quiz;
+    return q && q.active && S.tab && q.tab === S.tab.id && q.drawer !== GL.state.me.id;
+  };
+  let lockToast = 0;
   const canDraw = e => {
     if (!S.tab || S.tool === 'hand') return false;
+    if (quizLocked()) {
+      if (Date.now() - lockToast > 4000) { lockToast = Date.now(); GL.toast(`지금은 ${GL.state.quiz.drawerName}님만 그릴 수 있어요. 질문창에 정답을 입력하세요.`); }
+      return false;
+    }
     if (e.pointerType === 'pen') { S.pencilSeen = true; return true; }
     if (e.pointerType === 'touch') return S.finger;
     return e.button === 0;
@@ -309,6 +318,7 @@
       h('button', { class: 'tool', title: '되돌리기', 'aria-label': '되돌리기', html: icon('undo'), onclick: undo }),
       h('div', { class: 'tb-right' },
         isTouch ? h('button', { class: 'tool', title: '손가락으로 그리기', 'aria-label': '손가락으로 그리기', 'aria-pressed': String(S.finger), html: icon('finger'), onclick: () => { S.finger = !S.finger; persist(); renderTools(); GL.toast(S.finger ? '손가락으로도 그립니다.' : '손가락은 스크롤, 펜슬로만 그립니다.'); } }) : null,
+        GL.state.demo ? null : h('button', { class: 'tool', title: '캐치마인드', 'aria-label': '캐치마인드', html: icon('game'), onclick: quizMenu }),
         h('button', { class: 'tool', title: '종이 바꾸기', 'aria-label': '종이 바꾸기', html: icon('board'), onclick: e => paperMenu(e.currentTarget) }),
         h('button', { class: 'tool', title: '페이지 추가', 'aria-label': '페이지 추가', html: icon('page'), onclick: addPage }),
         h('button', { class: 'tool', title: '이 노트 전체 지우기', 'aria-label': '전체 지우기', html: icon('trash'), onclick: clearAll }),
@@ -349,6 +359,59 @@
     if (!e.metaKey && !e.ctrlKey && map[e.key]) setTool(map[e.key]);
   });
 
+  // ── 캐치마인드 ──
+  const quizBar = h('div', { id: 'quizBar', hidden: true });
+  scroller.parentElement.append(quizBar);
+  function quizMenu() {
+    const q = GL.state.quiz;
+    if (q && q.active && Date.now() < q.endsAt) { GL.notebook.activate(q.tab); return; }
+    GL.modal((box, close) => {
+      box.append(h('h2', {}, '캐치마인드'),
+        h('p', {}, '내가 제시어를 받아 그리고, 수강반 친구들은 질문창에 정답을 입력합니다. 90초 안에 맞히면 맞힌 사람과 그린 사람 모두 1점. 그림은 \'캐치마인드\' 탭에 그려집니다.'),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: close }, '취소'),
+          h('button', { class: 'btn primary', onclick: () => { close(); GL.send({ type: 'quiz_start', tab: q && q.tab }); } }, '내가 그리기')));
+    });
+  }
+  function scoresText(q) {
+    const list = Object.values(q.scores || {}).sort((a, b) => b.n - a.n);
+    return list.length ? list.map(x => `${x.name} ${x.n}`).join(' · ') : '';
+  }
+  function renderQuiz() {
+    const q = GL.state.quiz;
+    const show = q && S.tab && q.tab === S.tab.id;
+    quizBar.hidden = !show;
+    if (!show) return;
+    quizBar.innerHTML = '';
+    const me = GL.state.me.id, left = Math.max(0, Math.ceil((q.endsAt - Date.now()) / 1000));
+    const active = q.active && left > 0;
+    if (active && q.drawer === me) {
+      const w = GL.state.quizWord && GL.state.quizWord.round === q.round ? GL.state.quizWord.word : '…';
+      GL.add(quizBar, h('span', {}, '제시어 ', h('b', {}, w)), h('span', { class: 'qt' }, left + '초'),
+        h('button', { onclick: () => GL.send({ type: 'quiz_stop' }) }, '넘기기'));
+    } else if (active) {
+      GL.add(quizBar, h('span', {}, h('b', {}, q.drawerName), '님이 그리는 중 · 질문창에 정답 입력'), h('span', { class: 'qt' }, left + '초'),
+        h('button', { onclick: () => GL.setSideChat(true) }, '질문창 열기'));
+    } else {
+      GL.add(quizBar, q.lastWord ? h('span', {}, '지난 정답 ', h('b', {}, q.lastWord)) : null,
+        scoresText(q) ? h('span', { class: 'qs' }, scoresText(q)) : null,
+        h('button', { onclick: () => GL.send({ type: 'quiz_start', tab: q.tab }) }, '내가 다음 문제 그리기'),
+        scoresText(q) ? h('button', { onclick: () => GL.send({ type: 'quiz_reset' }) }, '점수 초기화') : null);
+    }
+  }
+  setInterval(() => { if (GL.state.quiz && GL.state.quiz.active) renderQuiz(); }, 1000);
+  GL.on('srv:init', d => { GL.state.quiz = d.quiz; renderQuiz(); });
+  GL.on('srv:quiz', d => {
+    const prev = GL.state.quiz;
+    GL.state.quiz = d.quiz;
+    const q = d.quiz;
+    if (q.active && (!prev || prev.round !== q.round)) {
+      if (q.drawer === GL.state.me.id) { GL.notebook.activate(q.tab); setTool('pen'); }
+      else GL.toast(`${q.drawerName}님이 캐치마인드 문제를 냈습니다.`, { label: '보러 가기', fn: () => { GL.notebook.activate(q.tab); GL.setSideChat(true); } }, 8000);
+    }
+    renderQuiz();
+  });
+  GL.on('srv:quiz_word', d => { GL.state.quizWord = d; renderQuiz(); });
+
   // ── 외부 API (notebook.js에서 사용) ──
   GL.board = {
     open(tab) {
@@ -365,6 +428,7 @@
       S.pages.forEach(p => p.el.dataset.paper = tab.paper);
       renderTools();
       if (!same) { redrawAll(); GL.send({ type: 'view', tab: tab.id }); }
+      renderQuiz();
     },
     update(tab) {
       if (!S.tab || S.tab.id !== tab.id) return;
@@ -372,7 +436,7 @@
       if (tab.pages > S.pages.length) buildPages(tab.pages);
       S.pages.forEach(p => p.el.dataset.paper = tab.paper);
     },
-    hide() { tools.hidden = true; scroller.hidden = true; if (S.tab) { S.tab = null; GL.send({ type: 'view', tab: null }); } },
+    hide() { tools.hidden = true; scroller.hidden = true; if (S.tab) { S.tab = null; GL.send({ type: 'view', tab: null }); } renderQuiz(); },
     current: () => S.tab,
     reopen() { if (S.tab) { const t = S.tab; S.tab = null; GL.board.open(t); } },
   };

@@ -129,3 +129,26 @@ div.c-item { cursor: default; }
 @media (max-width: 760px) {
   #chat .c-side { position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; box-shadow: 20px 0 40px rgba(0,0,0,.5); }
 }
+
+/* 시스템 메시지 (캐치마인드 등) */
+.c-sys { align-self: center; max-width: 90%; text-align: center; font-size: 13.5px; color: var(--c-dim); background: var(--c-hover); padding: 6px 14px; border-radius: 14px; }
+/* 서식 */
+.c-msg code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: .88em; background: var(--c-hover); padding: 1px 6px; border-radius: 6px; }
+.c-msg.me code { background: rgba(255,255,255,.12); }
+.c-msg strong { font-weight: 700; }
+.c-msg .li { display: inline-block; padding-left: 1.1em; text-indent: -1.1em; }
+.c-msg .li::before { content: '•'; display: inline-block; width: 1.1em; text-indent: 0; }
+.c-msg .katex { font-size: 1.08em; }
+.c-msg .katex-display { margin: .4em 0; overflow-x: auto; overflow-y: hidden; }
+/* 스트리밍 커서 */
+.c-cursor { display: inline-block; width: .6em; height: .6em; margin-left: 3px; border-radius: 50%; background: var(--c-text); vertical-align: middle; }
+#chat.skin-charcoal .c-cursor { border-radius: 2px; width: .5em; height: 1em; background: var(--c-accent); }
+/* 입력 중 */
+.c-typing-box { display: flex; flex-direction: column; gap: 10px; }
+.c-typing-box:empty { display: none; }
+.c-typing { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.c-typing small { font-size: 12px; color: var(--c-dim); }
+.c-pulse { width: 14px; height: 14px; border-radius: 50%; background: var(--c-text); animation: cpulse 1.1s ease-in-out infinite; }
+@keyframes cpulse { 0%, 100% { transform: scale(.75); opacity: .7; } 50% { transform: scale(1); opacity: 1; } }
+.c-typing.shimmer { font-size: 15px; color: transparent; background: linear-gradient(90deg, var(--c-dim) 0%, var(--c-text) 50%, var(--c-dim) 100%) 0 0 / 200% 100%; -webkit-background-clip: text; background-clip: text; animation: cshimmer 1.6s linear infinite; }
+@keyframes cshimmer { from { background-position: 200% 0; } to { background-position: 0 0; } }
