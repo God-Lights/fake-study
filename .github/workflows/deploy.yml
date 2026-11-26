@@ -1,0 +1,37 @@
+name: Deploy fake-study (GL STUDY) to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Type check
+        run: npx tsc
+
+      # Workers 배포 (Durable Object SQLite 마이그레이션도 wrangler.toml 기준으로 같이 적용됨)
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.107.0'
+
+      # GL Account 연동 시크릿 등록 (GL Chat과 같은 키)
+      - name: Set secrets
+        run: |
+          echo "${{ secrets.GL_ACCOUNT_KEY }}" | npx wrangler@4.107.0 secret put GL_ACCOUNT_KEY
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

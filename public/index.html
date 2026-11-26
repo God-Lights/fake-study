@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1c1c1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GL STUDY">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>GL STUDY · 내 강의실</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Noto+Serif+KR:wght@300;400&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/chat.css">
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login" hidden>
+  <div class="login-box">
+    <h1>GL <span>STUDY</span></h1>
+    <p>수강반 친구들과 강의 듣고, 필기 공유하고, 질문하는 공간.</p>
+    <div id="loginMsg" hidden></div>
+    <a href="/api/auth/gl">GL 계정으로 로그인</a>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header id="topbar">
+    <button id="logo" title="공부 모드로 전환 (Esc)"><span class="mark">GL</span><span class="name">GL STUDY</span></button>
+    <span id="demoBanner" hidden>미리보기</span>
+    <nav class="seg" aria-label="보기 전환">
+      <button data-mode="lecture" aria-pressed="false">강의</button>
+      <button data-mode="note" aria-pressed="false">노트</button>
+      <button data-mode="chat" aria-pressed="false">질문</button>
+    </nav>
+    <div class="top-right">
+      <div class="studytime">오늘 학습<b id="studyTime">0:00:00</b></div>
+      <button class="tbtn" id="roomBtn" title="수강반"><span id="roomName">수강반</span><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="tbtn" id="sideBtn" aria-pressed="false" title="질문창 옆에 띄우기">
+        <svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg>
+        <span class="badge" id="unread" hidden>0</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="stage" data-mode="note">
+    <!-- 강의 -->
+    <section id="lecture" class="pane">
+      <div class="lec-wrap">
+        <div class="lec-main">
+          <div class="player-box">
+            <div id="ytPlayer"></div>
+            <div class="player-empty" id="playerEmpty"><div><strong>강의를 추가해 주세요</strong>오른쪽 커리큘럼에 유튜브 링크를 붙여넣으면 여기서 재생됩니다.</div></div>
+          </div>
+          <div class="lec-info">
+            <h1 id="lecTitle">수강 중인 강의 없음</h1>
+            <div class="lec-meta" id="lecMeta">커리큘럼에서 강의를 고르세요</div>
+            <div class="lec-row">
+              <div class="progress"><div id="lecProg"></div></div>
+              <span id="lecPct">진도율 0%</span>
+              <button class="btn" id="shareLec"><svg class="i" viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0"/><circle cx="12" cy="7" r="3"/><path d="M4 20c1.5-3 4.5-4.5 8-4.5s6.5 1.5 8 4.5"/></svg>같이 듣기</button>
+            </div>
+          </div>
+        </div>
+        <aside class="curriculum">
+          <h2>커리큘럼<small id="lecCount"></small></h2>
+          <form id="addLec" autocomplete="off">
+            <input id="lecUrl" placeholder="유튜브 링크 붙여넣기" inputmode="url">
+            <button class="btn primary" type="submit">추가</button>
+          </form>
+          <ol id="lecList"></ol>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 노트 -->
+    <section id="note" class="pane">
+      <div class="note-tabs" id="noteTabs"></div>
+      <div class="toolbar" id="boardTools"></div>
+      <div class="note-body">
+        <div id="boardScroll">
+          <div id="pages"></div>
+          <div id="cursors"></div>
+        </div>
+        <div id="gameHost"></div>
+      </div>
+    </section>
+
+    <!-- 질문 -->
+    <aside id="chatHost">
+      <div id="chat" class="skin-black">
+        <aside class="c-side"></aside>
+        <div class="c-main is-empty" id="cMain">
+          <div class="c-hd"></div>
+          <div class="c-search" id="cSearch" hidden><input id="cSearchInput" placeholder="대화 검색"></div>
+          <div class="c-empty"><h2><span class="c-mark"></span><span id="cGreet"></span></h2></div>
+          <div class="c-scroll" id="cScroll"><div class="c-msgs" id="cMsgs"></div></div>
+          <div class="c-bottom">
+            <form class="c-composer" id="cForm"><textarea id="cInput" rows="1" enterkeyhint="send"></textarea></form>
+            <div class="c-under" id="cUnder" hidden><button type="button" id="cUnderRoomBtn"><span id="cUnderRoom">수강반</span><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="m6 9 6 6 6-6"/></svg></button><span class="sp"></span><span class="c-model">GL 튜터 <span>높음</span></span></div>
+            <p class="c-note" id="cNote"></p>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div id="modal" hidden></div>
+<div id="toasts"></div>
+
+<script src="js/core.js"></script>
+<script src="js/lecture.js"></script>
+<script src="js/board.js"></script>
+<script src="js/games.js"></script>
+<script src="js/chess.js"></script>
+<script src="js/notebook.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

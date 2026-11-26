@@ -1,0 +1,25 @@
+name = "fake-study"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [{ pattern = "study.officialgl.com", custom_domain = true }]
+
+# 정적 프론트엔드 (public/index.html). /api/* 는 파일이 없으므로 Worker로 넘어간다.
+[assets]
+directory = "./public"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# D1/KV 없이 SQLite 기반 Durable Object 두 개로만 구성 → 리소스 ID 불필요
+[[durable_objects.bindings]]
+name = "DIRECTORY"
+class_name = "Directory"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Directory", "Room"]

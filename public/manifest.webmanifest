@@ -1,0 +1,10 @@
+{
+  "name": "GL STUDY",
+  "short_name": "GL STUDY",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1c1c1e",
+  "theme_color": "#1c1c1e",
+  "icons": [{ "src": "/icon.png", "sizes": "512x512", "type": "image/png" }]
+}
