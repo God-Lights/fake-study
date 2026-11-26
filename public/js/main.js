@@ -13,7 +13,7 @@
     if (mode === 'note') GL.notebook.shown();
     if (mode === 'lecture') GL.lecture.shown();
     applyChatLayout();
-    document.title = { lecture: 'GL STUDY · 강의 수강 중', note: 'GL STUDY · 필기 노트', chat: 'GL 튜터' }[mode];
+    document.title = { lecture: 'GL STUDY · 강의 수강 중', note: 'GL STUDY · 필기 노트', chat: '새 채팅' }[mode];
   };
   GL.setSideChat = on => {
     if (stage.dataset.mode === 'chat' && !on) { GL.setMode(store.get('lastPane', 'note')); return; }

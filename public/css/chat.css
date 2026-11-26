@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────
-   질문창 (GL 튜터) — AI 채팅 화면 구조의 그룹 채팅
+   질문창 — AI 채팅 화면 구조의 그룹 채팅
    skin-black    : 검정 배경, 알약 입력창, 파란 말풍선, 파란 음성 버튼
    skin-charcoal : 차콜 배경, 박스형 입력창(아래 줄에 + / 마이크), 회색 말풍선
    ───────────────────────────────────────────────────────────── */
@@ -22,7 +22,7 @@
 .c-side { width: 280px; flex-shrink: 0; background: var(--c-side); display: flex; flex-direction: column; padding: 8px 8px 0; min-height: 0; border-right: 1px solid var(--c-line); }
 #chat.side .c-side, #chat.side-closed .c-side { display: none; }
 .c-side-hd { display: flex; align-items: center; gap: 4px; padding: 6px 4px 14px 10px; }
-.c-brand { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+.c-brand { min-height: 28px; font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
 .c-brand.serif { font-family: 'Noto Serif KR', serif; font-weight: 400; font-size: 22px; color: #d6d4cc; margin-left: 4px; }
 .c-pillbtns { display: flex; background: var(--c-hover); border-radius: 10px; padding: 2px; }
 .c-pillbtns .c-ico { width: 34px; height: 30px; border-radius: 8px; }

@@ -42,7 +42,7 @@
     black: {
       greet: '준비되면 말씀하세요.',
       placeholder: '무엇이든 물어보세요',
-      note: 'GL 튜터는 실수할 수 있습니다. 중요한 정보는 확인하세요.',
+      note: 'AI는 실수할 수 있습니다. 중요한 정보는 확인하세요.',
       nav: [['newchat', '새 채팅', 'new'], ['play', '강의', 'lecture'], ['note', '노트', 'note'], ['clock', '예약됨', 'time'], ['grid', '탐색', 'search']],
       roomsTitle: '프로젝트', recentTitle: '최근 항목',
     },
@@ -62,12 +62,12 @@
     side.innerHTML = '';
     const hd = h('div', { class: 'c-side-hd' });
     if (skin === 'black') {
-      hd.append(h('span', { class: 'c-brand' }, 'GL 튜터'), h('span', { class: 'sp' }),
+      hd.append(h('span', { class: 'c-brand' }), h('span', { class: 'sp' }),
         h('button', { class: 'c-ico', title: '검색', html: ic('search'), onclick: toggleSearch }),
         h('button', { class: 'c-ico', title: '사이드바 닫기', html: ic('sidebar'), onclick: () => setSide(false) }));
     } else {
       hd.append(h('button', { class: 'c-ico', title: '사이드바 닫기', html: ic('sidebar'), onclick: () => setSide(false) }),
-        h('span', { class: 'c-brand serif' }, 'GL 튜터'), h('span', { class: 'sp' }),
+        h('span', { class: 'c-brand serif' }), h('span', { class: 'sp' }),
         h('span', { class: 'c-pillbtns' },
           h('button', { class: 'c-ico on', title: '채팅', html: ic('newchat', 18) }),
           h('button', { class: 'c-ico', title: '노트', html: ic('note', 18), onclick: () => GL.setMode('note') })));
@@ -136,7 +136,7 @@
     hd.innerHTML = '';
     const st = GL.state, empty = !msgs.length;
     hd.append(h('button', { class: 'c-ico c-open', title: '사이드바 열기', html: ic('sidebar'), onclick: () => setSide(true) }));
-    if (!empty || skin === 'black') hd.append(h('span', { class: 'title' }, empty ? '' : (st.room ? st.room.name : 'GL 튜터')));
+    if (!empty || skin === 'black') hd.append(h('span', { class: 'title' }, empty ? '' : (st.room ? st.room.name : '')));
     hd.append(h('span', { class: 'sp' }));
     if (skin === 'black') {
       if (!empty) hd.append(h('button', { class: 'c-ico', title: '더보기', html: ic('dots') }), h('button', { class: 'c-ico', title: '초대코드 복사', html: ic('share'), onclick: copyInvite }));
